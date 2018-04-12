@@ -26,12 +26,12 @@
  *  poderia ser extraida do __DATE__ e __TIME__
  *  ou ser atualizado pelo PC.
  */
-#define YEAR        2018
-#define MOUNTH      3
-#define DAY         19
-#define WEEK        12
-#define HOUR        10
-#define MINUTE      55
+#define YEAR        0
+#define MOUNTH      0
+#define DAY         0
+#define WEEK        0
+#define HOUR        0
+#define MINUTE      0
 #define SECOND      0
 
 #define BUT_PIO_ID			  ID_PIOA
@@ -59,6 +59,11 @@
 #define LED_PIN		   0
 #define LED_PIN_MASK   (1<<LED_PIN)
 
+#define SEN_PIO_ID	   ID_PIOA
+#define SEN_PIO        PIOA
+#define SEN_PIN		   4
+#define SEN_PIN_MASK   (1<<SEN_PIN)
+
 /************************************************************************/
 /* VAR globais                                                          */
 /************************************************************************/
@@ -71,6 +76,11 @@ int led_counter = 0;
 int but_counter = 0;
 int minuto = MINUTE+1;
 int hora = HOUR;
+int seg = 0;
+int min1 = 0;
+int minuto_alarme = 0;
+int count_alarme_s = 0;
+int count_alarme_m = 0;
 /************************************************************************/
 /* PROTOTYPES                                                           */
 /************************************************************************/
@@ -90,50 +100,34 @@ void pin_toggle(Pio *pio, uint32_t mask);
 *  Handle Interrupcao botao 1
 */
 static void Button_1_Handler(uint32_t id, uint32_t mask){
-	if(flag_but_1){
-		uint32_t h,m,s;
-		rtc_get_time(RTC, &h, &m, &s);
-		print(h,m);
-		flag_but_1=!flag_but_1;
-	} else{
-		gfx_mono_draw_filled_circle(115, 5, 5, GFX_PIXEL_SET, GFX_WHOLE);
-		uint8_t stringLCD[256];
-		sprintf(stringLCD, "A%02d:%02d", hora, minuto+but_counter);
-		gfx_mono_draw_string(stringLCD, 0, 0, &sysfont);
-		flag_but_1=!flag_but_1;
+	if(!flag_but_1){
+		seg = 0;
+		min1 = 0;
+		count_alarme_m = 0;
+		count_alarme_s = 0;
+		flag_but_1 =!flag_but_1;
+		print(min1,seg);
 	}
 }
 static void Button_2_Handler(uint32_t id, uint32_t mask){
-	if (minuto+but_counter==59){
-		minuto = 0;
-		but_counter = 0;
-		hora += 1;
-	} else{
-
-		but_counter += 1;
-		
-	}
-	rtc_set_time_alarm(RTC, 1, hora, 1, minuto+but_counter, 1, SECOND);
+	
+	minuto_alarme = 1;
+	
+	//rtc_set_time_alarm(RTC, 0, hora, 1, minuto_alarme, 1, 0);
+	
 	uint8_t stringLCD[256];
-	sprintf(stringLCD, "A%02d:%02d", hora, minuto+but_counter);
+	sprintf(stringLCD, "Al%02d:%02d", minuto_alarme, 0);
 	gfx_mono_draw_string(stringLCD, 0, 0, &sysfont);
-	flag_but_1 = 1;
+	
 }
 static void Button_3_Handler(uint32_t id, uint32_t mask){
-	if (minuto+but_counter==0){
-		minuto = 59;
-		but_counter = 0;
-		hora -= 1;
-	} else{
-
-		but_counter -= 1;
- 	
-	}
-	rtc_set_time_alarm(RTC, 1, hora, 1, minuto+but_counter, 1, SECOND);
+	minuto_alarme = 2;
+	
+//	rtc_set_time_alarm(RTC, 0, hora, 1, minuto_alarme, 1, 0);
 	uint8_t stringLCD[256];
-	sprintf(stringLCD, "A%02d:%02d", hora, minuto+but_counter);
+	sprintf(stringLCD, "Al%02d:%02d", minuto_alarme, 0);
 	gfx_mono_draw_string(stringLCD, 0, 0, &sysfont);
-	flag_but_1 = 1;
+	
 }
 
 static void Button_0_Handler(uint32_t id, uint32_t mask){
@@ -185,10 +179,26 @@ void RTC_Handler(void)
 	if ((ul_status & RTC_SR_SEC) == RTC_SR_SEC) {
 		rtc_clear_status(RTC, RTC_SCCR_SECCLR);
 		
-		uint32_t h,m,s;
-		rtc_get_time(RTC, &h, &m, &s);
-		if (s==0){
-			print(h,m);
+		//uint32_t h,m,s;
+		
+		int y = pio_get(SEN_PIO, PIO_INPUT, SEN_PIN_MASK);
+		if(!y){
+			seg++;
+			if(seg == 60){
+				min1++;
+				seg = 0;
+			} 
+				//rtc_get_time(RTC, &h, &m, &s);
+			print(min1,seg);
+		} else{
+
+			count_alarme_s += 1;
+			if(count_alarme_s == 60){
+				count_alarme_m += 1;
+				count_alarme_s = 0;
+			}
+			//print(count_alarme_m, count_alarme_s);
+			rtc_set_time_alarm(RTC, 0, hora, 1, minuto_alarme+count_alarme_m, 1, count_alarme_s);
 		}
 		
 	}
@@ -196,9 +206,6 @@ void RTC_Handler(void)
 	/* Time or date alarm */
 	if ((ul_status & RTC_SR_ALARM) == RTC_SR_ALARM) {
 			rtc_clear_status(RTC, RTC_SCCR_ALRCLR);
-
-			uint32_t h,m,s;
-			rtc_get_time(RTC, &h, &m, &s);
 			
 			flag_led0 = !flag_led0;
 			
@@ -323,11 +330,10 @@ void BUT_3_init(void){
 	NVIC_SetPriority(BUT_3_PIO_ID, 1);
 };
 
-void print(int h, int m){
+void print(int m, int s){
 	
-	gfx_mono_draw_filled_circle(115, 5, 5, GFX_PIXEL_SET, GFX_WHOLE);
 	uint8_t stringLCD[256];
-	sprintf(stringLCD, "T%02d:%02d", h, m);
+	sprintf(stringLCD, "T:%02d:%02d", m, s);
 	gfx_mono_draw_string(stringLCD, 0, 0, &sysfont);
 	
 }
@@ -359,7 +365,16 @@ int main (void)
 	flag_but_1 = 0;
 	flag_led_2 = 0;
 	flag_led_3 = 0;
-	
+/*	int led_counter = 0;
+	int but_counter = 0;
+	int minuto = MINUTE+1;
+	int hora = HOUR;
+	int seg = 0;
+	int min1 = 0;
+	int minuto_alarme =0;
+	int count_alarme_s = 0;
+	int count_alarme_m = 0;
+	*/
 	while(1) {
 	
 	}
