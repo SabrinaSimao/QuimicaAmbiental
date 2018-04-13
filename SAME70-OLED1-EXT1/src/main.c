@@ -26,10 +26,10 @@
  *  poderia ser extraida do __DATE__ e __TIME__
  *  ou ser atualizado pelo PC.
  */
-#define YEAR        0
-#define MOUNTH      0
-#define DAY         0
-#define WEEK        0
+#define YEAR        2010
+#define MOUNTH      1
+#define DAY         1
+#define WEEK        1
 #define HOUR        0
 #define MINUTE      0
 #define SECOND      0
@@ -67,11 +67,14 @@
 /************************************************************************/
 /* VAR globais                                                          */
 /************************************************************************/
-volatile uint8_t flag_led0 = 0;
+volatile uint8_t flag_led0 = 1;
 volatile uint8_t flag_but_1 = 0;
 volatile uint8_t flag_led_2 = 0;
 volatile uint8_t flag_led_3 = 0;
 volatile uint8_t flag_lcd = 0;
+volatile uint8_t flag_print = 0;
+volatile uint8_t flag_print_1 = 0;
+volatile uint8_t flag_print_2 = 0;
 int led_counter = 0;
 int but_counter = 0;
 int minuto = MINUTE+1;
@@ -111,28 +114,21 @@ static void Button_1_Handler(uint32_t id, uint32_t mask){
 }
 static void Button_2_Handler(uint32_t id, uint32_t mask){
 	
-	minuto_alarme = 1;
-	
-	//rtc_set_time_alarm(RTC, 0, hora, 1, minuto_alarme, 1, 0);
-	
-	uint8_t stringLCD[256];
-	sprintf(stringLCD, "Al%02d:%02d", minuto_alarme, 0);
-	gfx_mono_draw_string(stringLCD, 0, 0, &sysfont);
+	minuto_alarme = 60;
+	flag_print_1 =! flag_print_1;
 	
 }
 static void Button_3_Handler(uint32_t id, uint32_t mask){
-	minuto_alarme = 2;
 	
-//	rtc_set_time_alarm(RTC, 0, hora, 1, minuto_alarme, 1, 0);
-	uint8_t stringLCD[256];
-	sprintf(stringLCD, "Al%02d:%02d", minuto_alarme, 0);
-	gfx_mono_draw_string(stringLCD, 0, 0, &sysfont);
+	minuto_alarme = 120;
+	flag_print_1 =! flag_print_1;
 	
 }
 
 static void Button_0_Handler(uint32_t id, uint32_t mask){
-		flag_led0=0;
+		flag_led0 =! flag_led0;
 		pmc_disable_periph_clk(ID_TC1);
+		tc_stop(TC0,1);
 }
 
 /**
@@ -178,27 +174,27 @@ void RTC_Handler(void)
 	*/
 	if ((ul_status & RTC_SR_SEC) == RTC_SR_SEC) {
 		rtc_clear_status(RTC, RTC_SCCR_SECCLR);
-		
-		//uint32_t h,m,s;
-		
+				
 		int y = pio_get(SEN_PIO, PIO_INPUT, SEN_PIN_MASK);
+		
+		//molhado
 		if(!y){
 			seg++;
 			if(seg == 60){
 				min1++;
 				seg = 0;
 			} 
-				//rtc_get_time(RTC, &h, &m, &s);
-			print(min1,seg);
-		} else{
-
-			count_alarme_s += 1;
-			if(count_alarme_s == 60){
-				count_alarme_m += 1;
-				count_alarme_s = 0;
+			if (minuto_alarme > 0){
+				minuto_alarme--;
 			}
-			//print(count_alarme_m, count_alarme_s);
-			rtc_set_time_alarm(RTC, 0, hora, 1, minuto_alarme+count_alarme_m, 1, count_alarme_s);
+			
+			flag_print =! flag_print;
+			
+			if (minuto_alarme == 0){
+				pmc_enable_periph_clk(ID_TC1);
+				flag_led0 =! flag_led0;
+			}
+		
 		}
 		
 	}
@@ -206,16 +202,7 @@ void RTC_Handler(void)
 	/* Time or date alarm */
 	if ((ul_status & RTC_SR_ALARM) == RTC_SR_ALARM) {
 			rtc_clear_status(RTC, RTC_SCCR_ALRCLR);
-			
-			flag_led0 = !flag_led0;
-			
-			if (flag_led0){
-				pmc_enable_periph_clk(ID_TC1);
-				
-			} else{
-				pmc_disable_periph_clk(ID_TC1);
-			}
-			
+
 	}
 	rtc_clear_status(RTC, RTC_SCCR_ACKCLR);
 	rtc_clear_status(RTC, RTC_SCCR_TIMCLR);
@@ -240,7 +227,7 @@ void RTC_init(){
 	/* Configure RTC interrupts */
 	NVIC_DisableIRQ(RTC_IRQn);
 	NVIC_ClearPendingIRQ(RTC_IRQn);
-	NVIC_SetPriority(RTC_IRQn, 0);
+	NVIC_SetPriority(RTC_IRQn, 1);
 	NVIC_EnableIRQ(RTC_IRQn);
 
 	/* Ativa interrupcao via alarme */
@@ -268,11 +255,13 @@ void TC_init(Tc * TC, int ID_TC, int TC_CHANNEL, int freq){
 
 	/* Configura e ativa interrupco no TC canal 0 */
 	/* Interrupo no C */
+	
 	NVIC_EnableIRQ((IRQn_Type) ID_TC);
+	NVIC_SetPriority(ID_TC, 0);
 	tc_enable_interrupt(TC, TC_CHANNEL, TC_IER_CPCS);
-
 	/* Inicializa o canal 0 do TC */
-	tc_start(TC, TC_CHANNEL);
+	tc_start(TC0, 1);
+	
 }
 
 
@@ -365,6 +354,9 @@ int main (void)
 	flag_but_1 = 0;
 	flag_led_2 = 0;
 	flag_led_3 = 0;
+	flag_print = 0;
+	flag_print_1 = 0;
+	flag_print_2 = 0;
 /*	int led_counter = 0;
 	int but_counter = 0;
 	int minuto = MINUTE+1;
@@ -377,5 +369,23 @@ int main (void)
 	*/
 	while(1) {
 	
+		if (flag_print){
+			print(min1,seg);
+			flag_print =! flag_print;
+		}
+		
+		if (flag_print_1){
+			uint8_t stringLCD[256];
+			sprintf(stringLCD, "Al%02d:%02d", 1, 0);
+			gfx_mono_draw_string(stringLCD, 0, 0, &sysfont);
+			flag_print_1 =! flag_print_1;
+		}
+		if (flag_print_2){
+			uint8_t stringLCD[256];
+			sprintf(stringLCD, "Al%02d:%02d", 2, 0);
+			gfx_mono_draw_string(stringLCD, 0, 0, &sysfont);
+			flag_print_2 =! flag_print_2;
+		}
+
 	}
 }
