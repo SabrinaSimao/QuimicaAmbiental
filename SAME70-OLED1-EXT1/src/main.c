@@ -107,6 +107,8 @@ static void Button_0_Handler(uint32_t id, uint32_t mask){
 
 
 static void Button_1_Handler(uint32_t id, uint32_t mask){
+		tc_stop(TC0,1);
+		
 		seg = 0;
 		min1 = 0;
 		
@@ -131,6 +133,7 @@ static void Button_2_Handler(uint32_t id, uint32_t mask){
 		flag_Alarm1   = !flag_Alarm1;
 		flag_runTime  = !flag_runTime;
 		alarm_done = 1;
+		tc_start(TC0,1);
 	}
 }
 
@@ -141,6 +144,7 @@ static void Button_3_Handler(uint32_t id, uint32_t mask){
 		flag_Alarm2   = !flag_Alarm2;
 		flag_runTime  = !flag_runTime;
 		alarm_done = 1;
+		tc_start(TC0,1);
 	}
 }
 
