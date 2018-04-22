@@ -161,10 +161,11 @@ void TC0_Handler(void){
 
 	/* Avoid compiler warning */
 	UNUSED(ul_dummy);
-
-	if(flag_led)
+	
+	if(flag_led){
 		pin_toggle(LED_PIO, LED_PIN_MASK);
-		//play_buzz(BUZZ_PIO, BUZZ_PIN_MASK);
+		play_buzz(BUZZ_PIO, BUZZ_PIN_MASK);
+	}
 	else{
 		pio_set(LED_PIO, LED_PIN_MASK);
 	}
@@ -232,6 +233,14 @@ void LED_init(int estado){
 	NVIC_EnableIRQ(LED_PIO_ID);
 	NVIC_SetPriority(LED_PIO_ID, 0);
 };
+
+void BUZZ_init(int estado){
+	pmc_enable_periph_clk(BUZZ_PIO_ID);
+	pio_set_output(BUZZ_PIO, BUZZ_PIN_MASK, estado, 0, 0 );
+	NVIC_EnableIRQ(BUZZ_PIO_ID);
+	NVIC_SetPriority(BUZZ_PIO_ID, 0);
+};
+
 
 void BUT_init(void){
 	
@@ -329,19 +338,18 @@ int main (void)
 	/* Configura Leds */
 	LED_init(1);
 	
+	BUZZ_init(1);
+	
 	
 	
 	uint8_t stringLCD[256];
-	
+	//TC_init(TC0, ID_TC0, 0, 0);
 	TC_init(TC0, ID_TC1, 1, 1);
 	pmc_disable_periph_clk(ID_TC1);
 	
 	
 	while(1) {
 	
-	//	if ((flag_runTime || flag_runTime2) && alarm_done){
-			
-	//	}
 		if(set_alarm){
 			gfx_mono_draw_string("Set_Alm", 0, 0, &sysfont);
 			set_alarm = 0;
@@ -359,7 +367,13 @@ int main (void)
 			flag_Alarm2 = !flag_Alarm2;
 			pmc_enable_periph_clk(ID_TC1);
 		}
-
+		
+		/*
+		if(flag_led){
+			pin_toggle(LED_PIO, LED_PIN_MASK);
+			play_buzz(BUZZ_PIO, BUZZ_PIN_MASK);
+		}
+		*/
 	}
 }
 
