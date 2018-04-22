@@ -57,20 +57,23 @@
 #define SEN_PIN		   4
 #define SEN_PIN_MASK   (1<<SEN_PIN)
 
+#define BUZZ_PIO_ID	    ID_PIOA
+#define BUZZ_PIO        PIOA
+#define BUZZ_PIN		24
+#define BUZZ_PIN_MASK   (1 << BUZZ_PIN)
+
+
 /************************************************************************/
 /* VAR globais                                                          */
 /************************************************************************/
 volatile uint8_t flag_led = 0;
 
-volatile uint8_t flag_but_1 = 0;
-
-volatile uint8_t flag_print = 0;
 volatile uint8_t flag_Alarm1 = 0;
 volatile uint8_t flag_Alarm2 = 0;
 
 volatile uint8_t flag_runTime = 0;
-volatile uint8_t flag_runTime2 = 1;
-volatile uint8_t set_alarm = 0;
+volatile uint8_t set_alarm = 1;
+
 int alarm_done = 0;
 int led_counter = 0;
 int but_counter = 0;
@@ -78,8 +81,6 @@ int but_counter = 0;
 int seg = 0;
 int min1 = 0;
 int minuto_alarme = 0;
-int count_alarme_s = 0;
-int count_alarme_m = 0;
 /************************************************************************/
 /* PROTOTYPES                                                           */
 /************************************************************************/
@@ -88,6 +89,7 @@ void TC_init();
 void LED_init(int estado);
 void print(int h, int m);
 void pin_toggle(Pio *pio, uint32_t mask);
+void play_buzz(Pio *pio, uint32_t mask);
 
 /************************************************************************/
 /* Handlers                                                             */
@@ -99,6 +101,7 @@ void pin_toggle(Pio *pio, uint32_t mask);
 
 static void Button_0_Handler(uint32_t id, uint32_t mask){
 	flag_led = 0;
+	pio_set(LED_PIO, LED_PIN_MASK);	
 	tc_stop(TC0,0);
 }
 
@@ -106,17 +109,18 @@ static void Button_0_Handler(uint32_t id, uint32_t mask){
 static void Button_1_Handler(uint32_t id, uint32_t mask){
 		seg = 0;
 		min1 = 0;
-		count_alarme_m = 0;
-		count_alarme_s = 0;
+		
+		minuto_alarme = 0;
+		
 		set_alarm = 1;
+		
 		flag_led = 0;
-		flag_but_1 = 0;
-		flag_print = 0;
 		flag_Alarm1 = 0;
 		flag_Alarm2 = 0;
-		flag_runTime = !flag_runTime;
-		flag_runTime2 = 1;
+	
+		flag_runTime = 0;
 		alarm_done = 0;
+		
 }
 
 
@@ -127,21 +131,17 @@ static void Button_2_Handler(uint32_t id, uint32_t mask){
 		flag_Alarm1   = !flag_Alarm1;
 		flag_runTime  = !flag_runTime;
 		alarm_done = 1;
-	} else{
-		flag_runTime =!flag_runTime;
 	}
-	
-	
 }
 
 static void Button_3_Handler(uint32_t id, uint32_t mask){
 		
-		
+	if (!flag_runTime){		
 		minuto_alarme = 120;
 		flag_Alarm2   = !flag_Alarm2;
-		flag_runTime2  = 1;
+		flag_runTime  = !flag_runTime;
 		alarm_done = 1;
-		
+	}
 }
 
 /**
@@ -159,7 +159,12 @@ void TC0_Handler(void){
 	UNUSED(ul_dummy);
 
 	if(flag_led)
-		pin_toggle(LED_PIO, LED_PIN_MASK);	
+		pin_toggle(LED_PIO, LED_PIN_MASK);
+		//play_buzz(BUZZ_PIO, BUZZ_PIN_MASK);
+	else{
+		pio_set(LED_PIO, LED_PIN_MASK);
+	}
+	
 }
 
 void TC1_Handler(void){
@@ -172,7 +177,7 @@ void TC1_Handler(void){
 
 	/* Avoid compiler warning */
 	UNUSED(ul_dummy);
-	if ((flag_runTime || flag_runTime2) && alarm_done){
+	if (flag_runTime && alarm_done){
 		int y = pio_get(SEN_PIO, PIO_INPUT, SEN_PIN_MASK);
 		
 		//molhado
@@ -186,7 +191,6 @@ void TC1_Handler(void){
 				minuto_alarme--;
 			}
 			
-		//	flag_print =! flag_print;
 			print(min1, seg);
 			if (minuto_alarme == 0){
 				TC_init(TC0, ID_TC0, 0, 8);
@@ -208,6 +212,13 @@ void pin_toggle(Pio *pio, uint32_t mask){
 	pio_set(pio,mask);
 }
 
+void play_buzz(Pio *pio, uint32_t mask){
+	if(pio_get_output_data_status(pio, mask))
+	pio_clear(pio, mask);
+	else
+	pio_set(pio,mask);
+}
+
 /**
 * @Brief Inicializa o pino do LED
 */
@@ -219,48 +230,52 @@ void LED_init(int estado){
 };
 
 void BUT_init(void){
+	
+	//Config. botao modo de entrada */
 	pmc_enable_periph_clk(BUT_PIO_ID);
 	pio_set_input(BUT_PIO, BUT_PIN_MASK, PIO_PULLUP | PIO_DEBOUNCE);
 
 	pio_enable_interrupt(BUT_PIO, BUT_PIN_MASK);
 	pio_handler_set(BUT_PIO, BUT_PIO_ID, BUT_PIN_MASK, PIO_IT_FALL_EDGE, Button_0_Handler);
 
-	NVIC_EnableIRQ(BUT_PIO_ID);
-	NVIC_SetPriority(BUT_PIO_ID, 1);
-};
 
-void BUT_1_init(void){
+	//Config. botao 1 modo de entrada */
 	pmc_enable_periph_clk(BUT_1_PIO_ID);
 	pio_set_input(BUT_1_PIO, BUT_1_PIN_MASK, PIO_PULLUP | PIO_DEBOUNCE);
 
 	pio_enable_interrupt(BUT_1_PIO, BUT_1_PIN_MASK);
 	pio_handler_set(BUT_1_PIO, BUT_1_PIO_ID, BUT_1_PIN_MASK, PIO_IT_FALL_EDGE, Button_1_Handler);
 
-	NVIC_EnableIRQ(BUT_1_PIO_ID);
-	NVIC_SetPriority(BUT_1_PIO_ID, 1);
-};
-
-void BUT_2_init(void){
-	/* config. pino botao em modo de entrada */
+	//Config. botao 2 modo de entrada */
 	pmc_enable_periph_clk(BUT_2_PIO_ID);
 	pio_set_input(BUT_2_PIO, BUT_2_PIN_MASK, PIO_PULLUP | PIO_DEBOUNCE);
 
 	pio_enable_interrupt(BUT_2_PIO, BUT_2_PIN_MASK);
 	pio_handler_set(BUT_2_PIO, BUT_2_PIO_ID, BUT_2_PIN_MASK, PIO_IT_FALL_EDGE, Button_2_Handler);
 
-	NVIC_EnableIRQ(BUT_2_PIO_ID);
-	NVIC_SetPriority(BUT_2_PIO_ID, 1);
-};
-
-void BUT_3_init(void){
-
+	//Config. botao 3 modo de entrada */
 	pmc_enable_periph_clk(BUT_3_PIO_ID);
 	pio_set_input(BUT_3_PIO, BUT_3_PIN_MASK, PIO_PULLUP | PIO_DEBOUNCE);
 
 	pio_enable_interrupt(BUT_3_PIO, BUT_3_PIN_MASK);
 	pio_handler_set(BUT_3_PIO, BUT_3_PIO_ID, BUT_3_PIN_MASK, PIO_IT_FALL_EDGE, Button_3_Handler);
 
+	delay_ms(400);
+	
+	pio_get_interrupt_status(BUT_1_PIO);
+	NVIC_EnableIRQ(BUT_1_PIO_ID);
+	NVIC_SetPriority(BUT_1_PIO_ID, 1);
+	
+	pio_get_interrupt_status(BUT_PIO);
+	NVIC_EnableIRQ(BUT_PIO_ID);
+	NVIC_SetPriority(BUT_PIO_ID, 1);
+	
+	pio_get_interrupt_status(BUT_2_PIO);
+	NVIC_EnableIRQ(BUT_2_PIO_ID);
+	NVIC_SetPriority(BUT_2_PIO_ID, 1);
+
 	NVIC_EnableIRQ(BUT_3_PIO_ID);
+	pio_get_interrupt_status(BUT_3_PIO);
 	NVIC_SetPriority(BUT_3_PIO_ID, 1);
 };
 
@@ -269,9 +284,7 @@ void print(int m, int s){
 	uint8_t stringLCD[256];
 	sprintf(stringLCD, "T:%02d:%02d", m, s);
 	gfx_mono_draw_string(stringLCD, 0, 0, &sysfont);
-	
 }
-
 
 void TC_init(Tc * TC, int ID_TC, int TC_CHANNEL, int freq){
 	uint32_t ul_div;
@@ -281,12 +294,6 @@ void TC_init(Tc * TC, int ID_TC, int TC_CHANNEL, int freq){
 	uint32_t channel = 1;
 
 	/* Configura o PMC */
-	/* O TimerCounter  meio confuso
-	o uC possui 3 TCs, cada TC possui 3 canais
-	TC0 : ID_TC0, ID_TC1, ID_TC2
-	TC1 : ID_TC3, ID_TC4, ID_TC5
-	TC2 : ID_TC6, ID_TC7, ID_TC8
-	*/
 	pmc_enable_periph_clk(ID_TC);
 
 	/** Configura o TC para operar em  4Mhz e interrupco no RC compare */
@@ -295,15 +302,15 @@ void TC_init(Tc * TC, int ID_TC, int TC_CHANNEL, int freq){
 	tc_write_rc(TC, TC_CHANNEL, (ul_sysclk / ul_div) / freq);
 
 	/* Configura e ativa interrupco no TC canal 0 */
+	
 	/* Interrupo no C */
 	NVIC_EnableIRQ((IRQn_Type) ID_TC);
 	tc_enable_interrupt(TC, TC_CHANNEL, TC_IER_CPCS);
 	NVIC_SetPriority(ID_TC, 0);
+	
 	/* Inicializa o canal 0 do TC */
 	tc_start(TC, TC_CHANNEL);
 }
-
-
 
 int main (void)
 {
@@ -314,10 +321,6 @@ int main (void)
 
 	/* Configura os bot?es */
 	BUT_init();
-	BUT_1_init();
-	BUT_3_init();
-	BUT_2_init();
-	
 	
 	/* Configura Leds */
 	LED_init(1);
@@ -328,7 +331,6 @@ int main (void)
 	
 	TC_init(TC0, ID_TC1, 1, 1);
 	pmc_disable_periph_clk(ID_TC1);
-	
 	
 	
 	while(1) {
@@ -356,3 +358,4 @@ int main (void)
 
 	}
 }
+
